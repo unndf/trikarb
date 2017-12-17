@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.io.IOException
 import com.fasterxml.jackson.module.kotlin.*
 import com.fasterxml.jackson.annotation.*
+import kotlin.system.measureTimeMillis
 
 @JsonIgnoreProperties(ignoreUnknown=true)
 data class CurrencyPair(
@@ -17,8 +18,11 @@ data class CurrencyPair(
     val quote: String,
     
     @JsonProperty("MinTradeSize")
-    val MinTradeSize: BigDecimal)
-
+    val MinTradeSize: BigDecimal  = 0)
+    {
+        override fun toString(): String = "${this.base}-${this.quote}"
+    }
+    
 @JsonIgnoreProperties(ignoreUnknown=true)
 data class Currency(
     
@@ -32,7 +36,8 @@ data class Currency(
     val minimumConfirmation: Int,
     
     @JsonProperty("TxFee")
-    val txFee: BigDecimal)
+    val txFee: BigDecimal
+    )
 
 @JsonIgnoreProperties(ignoreUnknown=true)
 data class Tick(
@@ -44,20 +49,42 @@ data class Tick(
     val ask: BigDecimal,
     
     @JsonProperty("Last")
-    val last: BigDecimal)
+    val last: BigDecimal
+    )
 
-data class Entry (val rate: BigDecimal, val amount: BigDecimal)
 
-data class OrderBook (val bid: List<Entry>, val ask: List<Entry>)
+@JsonIgnoreProperties(ignoreUnknown=true)
+data class Entry(
+    
+    @JsonProperty("Quantity")
+    val quantity: BigDecimal,
+
+    @JsonProperty("Rate")
+    val rate: BigDecimal
+    )
+
+@JsonIgnoreProperties(ignoreUnknown=true)
+data class Orderbook(
+    
+    @JsonProperty("buy")
+    val bid: List<Entry>,
+
+    @JsonProperty("sell")
+    val ask: List<Entry>
+    )
 
 fun main(args: Array<String>)
 {
-    val bittrex = BittrexPublic()
-    for (market in bittrex.getMarkets())
-        println(market)
+    var counter = 0
+    val elapsed = measureTimeMillis {
+        val bittrex = BittrexPublic()
 
-    for (currency in bittrex.getCurrencies()){
-        println(currency)
+        for (market in bittrex.getMarkets()){
+            counter++
+            bittrex.getOrderbook(market)
+        }
+    }
+    println("$elapsed ms ($counter orderbook req.)")
 }
 
 class BittrexMarket(){
@@ -73,23 +100,26 @@ class BittrexPublic(version: String = "v1.1"){
     data class GetMarketResponse(
         val success: Boolean,
         val message: String,
-        val result: List<CurrencyPair>)
+        val result: List<CurrencyPair>
+    )
     
     data class GetCurrenciesResponse(
         val success: Boolean,
         val message: String,
-        val result: List<Currency>)
+        val result: List<Currency>
+    )
 
     data class GetTickerResponse(
         val success: Boolean,
         val message: String,
-        val result: Tick)
+        val result: Tick
+    )
 
-    data class getTickerResponse(
+    data class GetOrderbookResponse(
         val success: Boolean,
         val message: String,
-        val result: Tick)
-
+        val result: Orderbook
+    )
     fun getMarkets(): List<CurrencyPair> {   
         val stream = request(URL("https://bittrex.com/api/$version/public/getmarkets"))
         val response = mapper.readValue<GetMarketResponse>(stream)
@@ -98,6 +128,7 @@ class BittrexPublic(version: String = "v1.1"){
 
         return response.result
     }
+
     fun getCurrencies(): List<Currency> {
         val stream = request(URL("https://bittrex.com/api/$version/public/getcurrencies"))
         val response = mapper.readValue<GetCurrenciesResponse>(stream)
@@ -108,16 +139,22 @@ class BittrexPublic(version: String = "v1.1"){
     }
 
     fun getTicker(market: CurrencyPair): Tick {
-        val stream = request(URL("https://bittrex.com/api/$version/public/getticker?market${market.base}-${market.quote}"))
+        val stream = request(URL("https://bittrex.com/api/$version/public/getticker?market=${market.base}-${market.quote}"))
         val response = mapper.readValue<GetTickerResponse>(stream)
         
         if (!response.success) throw IOException("$version/getticker REST query was unsuccessful")
 
         return response.result
-       
     }
-    //fun getOrderBook(market: AssetPair): OrderBook {
-    //}
+
+    fun getOrderbook(market: CurrencyPair): Orderbook {
+        val stream = request(URL("https://bittrex.com/api/$version/public/getorderbook?market=${market.base}-${market.quote}&type=both"))
+        val response = mapper.readValue<GetOrderbookResponse>(stream)
+        
+        if (!response.success) throw IOException("$version/getorderbook REST query was unsuccessful")
+
+        return response.result
+    }
     
     private fun request(url: URL): InputStream  = url.openStream()
 }
