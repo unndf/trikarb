@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.*
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 
 @JsonIgnoreProperties(ignoreUnknown=true)
-data class CurrencyPair(
+data class BittrexCurrencyPair(
     @JsonProperty("BaseCurrency") val base: String,
     @JsonProperty("MarketCurrency") val quote: String,
     @JsonProperty("MinTradeSize") val MinTradeSize: BigDecimal  = BigDecimal(0)){
@@ -16,7 +16,7 @@ data class CurrencyPair(
     }
     
 @JsonIgnoreProperties(ignoreUnknown=true)
-data class Currency(
+data class BittrexCurrency(
     @JsonProperty("Currency") val name: String,
     @JsonProperty("CurrencyLong") val verboseName: String,
     @JsonProperty("MinConfrimation") val minimumConfirmation: Int,
@@ -24,94 +24,87 @@ data class Currency(
     )
 
 @JsonIgnoreProperties(ignoreUnknown=true)
-data class Tick(
+data class BittrexTick(
     @JsonProperty("Bid") val bid: BigDecimal,
     @JsonProperty("Ask") val ask: BigDecimal,
     @JsonProperty("Last") val last: BigDecimal
     )
 
 @JsonIgnoreProperties(ignoreUnknown=true)
-data class Entry(
+data class BittrexMarketSummary(
+    @JsonProperty("MarketName") val name: String,
+    @JsonProperty("Bid") val bid: BigDecimal,
+    @JsonProperty("Ask") val ask: BigDecimal,
+    @JsonProperty("Last") val last: BigDecimal,
+    @JsonProperty("High") val high: BigDecimal,
+    @JsonProperty("Low") val low: BigDecimal,
+    @JsonProperty("Volume") val volume: BigDecimal,
+    @JsonProperty("OpenBuyOrders") val openBids: Int,
+    @JsonProperty("OpenSellOrders") val openAsks: Int
+)
+
+@JsonIgnoreProperties(ignoreUnknown=true)
+data class BittrexEntry(
     @JsonProperty("Quantity") val quantity: BigDecimal,
     @JsonProperty("Rate") val rate: BigDecimal
     )
 
 @JsonIgnoreProperties(ignoreUnknown=true)
-data class Orderbook(
-    @JsonProperty("buy") val bid: List<Entry?>,
-    @JsonProperty("sell") val ask: List<Entry?>
+data class BittrexOrderbook(
+    @JsonProperty("buy") val bid: List<BittrexEntry?>,
+    @JsonProperty("sell") val ask: List<BittrexEntry?>
     )
 
-class BittrexPublic(version: String = "v1.1"){
+private data class Response <T>(
+        val success: Boolean,
+        val message: String,
+        val result: T
+    )
+
+class Bittrex(version: String = "v1.1"){
     val version = version
     val mapper = jacksonObjectMapper()
-    
-    //Sorta Kludgy
-    //the result param is nullable due to the cases where success==false and result==null
-    data class GetMarketResponse(
-        val success: Boolean,
-        val message: String,
-        val result: List<CurrencyPair>?
-    )
-    
-    data class GetCurrenciesResponse(
-        val success: Boolean,
-        val message: String,
-        val result: List<Currency>?
-    )
+    val urlBase = "https://bittrex.com/api/$version"
 
-    data class GetTickerResponse(
-        val success: Boolean,
-        val message: String,
-        val result: Tick?
-    )
-
-    data class GetOrderbookResponse(
-        val success: Boolean,
-        val message: String,
-        val result: Orderbook?
-    )
-
-    fun getMarkets(): List<CurrencyPair> {   
-        val response = mapper.readValue<GetMarketResponse>(
-            URL("https://bittrex.com/api/$version/public/getmarkets")
-        )
-
-        if (response.success && (response.result != null))
-            return response.result
-        else 
-            throw IOException("$version/getmarkets REST query was unsuccessful")
+    fun getMarkets(): List<BittrexCurrencyPair> {
+        val response = mapper.readValue<Response<List<BittrexCurrencyPair>>>(URL("$urlBase/public/getmarkets"))
+        return verify<List<BittrexCurrencyPair>>(response)
+    }
+    fun getCurrencies(): List<BittrexCurrency> {
+        val response = mapper.readValue<Response<List<BittrexCurrency>>>(URL("$urlBase/public/getcurrencies"))
+        return verify<List<BittrexCurrency>>(response)
     }
 
-    fun getCurrencies(): List<Currency> {
-        val response = mapper.readValue<GetCurrenciesResponse>(
-            URL("https://bittrex.com/api/$version/public/getcurrencies")
-        )
-
-        if (response.success && (response.result != null))
-            return response.result
-        else 
-            throw IOException("$version/getcurrencies REST query was unsuccessful")
+    fun getMarketSummaries(): List<BittrexMarketSummary> {
+        val response = mapper.readValue<Response<List<BittrexMarketSummary>>>(URL("$urlBase/public/getmarketsummaries"))
+        return verify<List<BittrexMarketSummary>>(response)
     }
 
-    fun getTicker(market: CurrencyPair): Tick {
-        val response = mapper.readValue<GetTickerResponse>(
-            URL("https://bittrex.com/api/$version/public/getticker?market=${market.base}-${market.quote}")
-        )
-
-        if (response.success && (response.result != null))
-            return response.result
-        else 
-            throw IOException("$version/getticker REST query was unsuccessful")
+    fun getTicker(market: BittrexCurrencyPair): BittrexTick {
+        val response = mapper.readValue<Response<BittrexTick>>(URL("$urlBase/public/getticker?market=$market"))
+        return verify<BittrexTick>(response)
     }
 
-    fun getOrderbook(market: CurrencyPair): Orderbook {
-        val response = mapper.readValue<GetOrderbookResponse>(
-                URL("https://bittrex.com/api/$version/public/getorderbook?market=${market.base}-${market.quote}&type=both")
-        )
-        
-        if (response.success && (response.result != null))
+    fun getOrderbook(market: BittrexCurrencyPair): BittrexOrderbook {
+        val response = mapper.readValue<Response<BittrexOrderbook>>(URL("$urlBase/public/getorderbook?market=$market&type=both"))
+        return verify<BittrexOrderbook>(response)
+    }
+
+    private fun <T> verify(response: Response<T>): T {
+        if (response.success && (response.result != null)){
+           //println(response.result.javaClass.kotlin.qualifiedName)
+           return response.result
+        }
+        else throw IOException("REST Query was not successful. Got Message: ${response.message}")
+    }
+
+    private fun <T> request(requestUrl: String): T {
+        val response = mapper.readValue<Response<T?>> (URL("$urlBase$requestUrl"))
+
+        if (response.success && (response.result != null)){
+            //println(response.result.javaClass.kotlin.qualifiedName)
             return response.result
-        else throw IOException("$version/getorderbook REST query was unsuccessful\n${response.message}")
+        }
+        else throw IOException("$requestUrl REST Query was not successful. Got Message: ${response.message}")
     }
 }

@@ -100,7 +100,7 @@
                             <configuration>
                                 <archive>
                                     <manifest>
-                                        <mainClass>com.github.trikarb.BittrexKt</mainClass>
+                                        <mainClass>com.github.trikarb.AppKt</mainClass>
                                     </manifest>
                                 </archive>
                                 <descriptorRefs>
