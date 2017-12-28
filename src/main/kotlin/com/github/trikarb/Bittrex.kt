@@ -41,7 +41,7 @@ data class BittrexMarketSummary(
     @JsonProperty("Volume") val volume: BigDecimal,
     @JsonProperty("OpenBuyOrders") val openBids: Int,
     @JsonProperty("OpenSellOrders") val openAsks: Int
-)
+    )
 
 @JsonIgnoreProperties(ignoreUnknown=true)
 data class BittrexEntry(
@@ -51,9 +51,14 @@ data class BittrexEntry(
 
 @JsonIgnoreProperties(ignoreUnknown=true)
 data class BittrexOrderbook(
-    @JsonProperty("buy") val bid: List<BittrexEntry?>,
-    @JsonProperty("sell") val ask: List<BittrexEntry?>
-    )
+    @JsonProperty("buy") val bid: List<BittrexEntry>,
+    @JsonProperty("sell") val ask: List<BittrexEntry>
+    ){
+        override fun toString(): String = "--- Ask ---\n${this.ask.reversed().joinToString(separator="\n")}\n\n--- Bid ---\n${this.bid.joinToString(separator="\n")}"
+        
+        fun getBestBid(): BittrexEntry? = this.bid.maxBy{it.rate}
+        fun getBestAsk(): BittrexEntry? = this.ask.minBy{it.rate}
+    }
 
 private data class Response <T>(
         val success: Boolean,
@@ -65,6 +70,32 @@ class Bittrex(version: String = "v1.1"){
     val version = version
     val mapper = jacksonObjectMapper()
     val urlBase = "https://bittrex.com/api/$version"
+    
+    fun getMarketGraph(): Graph<String> {
+        val summarys = this.getMarketSummaries()
+        
+        //create edges out of all the bids
+        //filter out bids < 0
+        val edgesBids: Graph<String> = summarys.filter{it.bid > BigDecimal.ZERO}.map{
+            val name = it.name.split("-")
+            val start = name[0]
+            val end = name[1]
+            val weight = it.bid
+            DirectedEdge<String>(start, end, weight)
+        }.toSet()
+
+        //create edges out of all the asks
+        //filter out asks < 0
+        val edgesAsks: Graph<String> = summarys.filter{it.ask > BigDecimal.ZERO}.map{
+            val name = it.name.split("-")
+            val start = name[1]
+            val end = name[0]
+            val weight = BigDecimal.ONE.divide(it.ask,9,BigDecimal.ROUND_HALF_UP)
+            DirectedEdge<String>(start, end, weight)
+        }.toSet()
+
+        return edgesBids.union(edgesAsks)
+    }
 
     fun getMarkets(): List<BittrexCurrencyPair> {
         val response = mapper.readValue<Response<List<BittrexCurrencyPair>>>(URL("$urlBase/public/getmarkets"))
