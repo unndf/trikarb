@@ -1,15 +1,14 @@
 package com.github.trikarb
 
 import java.math.BigDecimal
+import java.math.MathContext
 import kotlin.system.measureTimeMillis
 
-data class Order(val name: String, val amount: BigDecimal, val rate: BigDecimal)
 sealed class Order
-{
-    data class Bid(val name: String, val amount: BigDecimal, val rate: BigDecimal)
-    data class Ask(val name: String, val amount: BigDecimal, val rate: BigDecimal)
-}
 
+data class Bid(val pair: BittrexCurrencyPair, val name: String, val amount: BigDecimal, val rate: BigDecimal): Order()
+data class Ask(val pair: BittrexCurrencyPair, val name: String, val amount: BigDecimal, val rate: BigDecimal): Order()
+/*
 class Trader(base: String, maxTradeSize: BigDecimal){
     var trading = false
     val baseCurrency = base
@@ -17,53 +16,52 @@ class Trader(base: String, maxTradeSize: BigDecimal){
     val tradeFees = 0.25 * 0.01 //hardcoded for Bittrex
     val bittrex = Bittrex()
     val currencyPairs = bittrex.getMarkets()
+    val mathContext = MathContext(9)
 
     fun triangularArbitrage() { 
         var cycles: Set<Cycle<String>> = setOf()
         var graph = bittrex.getMarketGraph()
         
+        graph = bittrex.getMarketGraph()
+        cycles = graph.getCycles(baseCurrency,3)
+            .union(graph.getCycles(baseCurrency,4))
+        
         //start trading
         trading = true
-        
         while(trading){
+            var timeCycles: Long = 0
             graph = bittrex.getMarketGraph()
-            cycles = graph.getCycles(baseCurrency,3)
+            cycles = cycles.map{it.updateWeights(graph)}.toSet()
+            val arbitrageOps = cycles.filter{
+                    it.getCrossrate() > BigDecimal(1.0 + it.size * tradeFees)
+            }
+
+            val bestOp = arbitrageOps.maxBy{it.getCrossrate()}
             
-            val arbOps = cycles.filter{
-                it.getCrossrate() > BigDecimal(1.0 + 3.0 * tradeFees)
-            }
-            val bestOp = arbOps.maxBy{it.getCrossrate()}
             if (bestOp != null){
-                println("\n$bestOp @${bestOp.getCrossrate()}")
-                getOrderBooks(bestOp, maxTradeSize)
+                val elapse = measureTimeMillis{
+                    val trades = prepareTrades(bestOp, maxTradeSize)
+                }
+                println("$elapse (ms) preparing trades")
             }
-        }
+        } 
     }
 
-    private fun getOrderBooks(cycle: Cycle<String>, amount: BigDecimal){
+    private fun prepareTrades(cycle: Cycle<String>, amount: BigDecimal): List<Order> {
         var rate = BigDecimal.ONE
         var startingTradeAmount = amount
-        //val orders: MutableList<Pair<String,BigDecimal>> = mutableListOf()
         val orders: MutableList<Order> = mutableListOf()
-
         for (edge in cycle){
             for (pair in currencyPairs){
                 if (isAskEdge(edge, pair)){
                     val book = bittrex.getOrderbook(pair)
                     val bestAsk = book.getBestAsk()
-                    
-                    //buy x quote @ ask
-                    //need to sleep
-                    //pls remember
-                    //if base_amount * rateproduct????? then base_amount = base_amount * rateproduct^-1
-                    //trust this makes sense
-                    //also bids/ask can be zero, fix next
     
                     if(bestAsk != null){
-                        rate *= bestAsk.rate
-                        orders.add("BUY ${edge.end} " to bestAsk.rate)
+                        rate = rate.multiply(bestAsk.rate,mathContext)
+                        orders.add(Bid(pair,edge.end,BigDecimal.ZERO,bestAsk.rate))
                         if (startingTradeAmount * rate > bestAsk.quantity) 
-                            startingTradeAmount = BigDecimal.ONE.divide(rate,9,BigDecimal.ROUND_HALF_UP) * bestAsk.quantity
+                            startingTradeAmount = BigDecimal.ONE.divide(rate,9,BigDecimal.ROUND_HALF_UP).multiply(bestAsk.quantity, mathContext)
                     }
                     break
                 }
@@ -73,31 +71,33 @@ class Trader(base: String, maxTradeSize: BigDecimal){
 
                     //sell x quote @ bid
                     if(bestBid != null){
-                        rate *= BigDecimal.ONE.divide(bestBid.rate,9,BigDecimal.ROUND_HALF_UP)
-                        orders.add("SELL ${edge.begin} " to BigDecimal.ONE.divide(bestBid.rate,9,BigDecimal.ROUND_HALF_UP))
+                        rate = rate.multiply(BigDecimal.ONE.divide(bestBid.rate,9,BigDecimal.ROUND_HALF_UP), mathContext)
+                        orders.add(Ask(pair,edge.begin,BigDecimal.ZERO,bestBid.rate))
                         if (startingTradeAmount * rate > bestBid.quantity)
-                            startingTradeAmount = BigDecimal.ONE.divide(rate,9,BigDecimal.ROUND_HALF_UP) * bestBid.quantity
+                            startingTradeAmount = BigDecimal.ONE.divide(rate,9,BigDecimal.ROUND_HALF_UP).multiply(bestBid.quantity, mathContext)
                     }
                     break
                 }
             }
         }
-        for (edge in cycle){
-            for (pair in currencyPairs){
-                if (isAskEdge(edge,Pair){
-                    
-                    
+        var x = startingTradeAmount
+        
+        return orders.map{
+            when(it){
+                is Bid -> {
+                    val bid = Bid(it.pair,it.name,x.multiply(BigDecimal.ONE.divide(it.rate,9,BigDecimal.ROUND_HALF_UP),mathContext), it.rate)
+                    x = x.multiply(BigDecimal.ONE.divide(it.rate,9,BigDecimal.ROUND_HALF_UP) * BigDecimal(1.0 - tradeFees), mathContext)
+                    bid
                 }
-                else if (isBidEdge(edge,Pair)){
+                is Ask -> {
+                    val ask = Ask(it.pair,it.name,x,it.rate)
+                    x = x.multiply(it.rate * BigDecimal(1.0 - tradeFees), mathContext)
+                    ask
                 }
             }
         }
-        println("${orders[i].first} ${startingTradeAmount}")
-        println("we start with $startingTradeAmount ETH")
-        for (i in 1..orders.size-1)
-            println("${order[i].first} ${order.second * startingTradeAmount}")
     }
 
     private fun isAskEdge(edge: DirectedEdge<String>, pair: BittrexCurrencyPair): Boolean  = (edge.begin == pair.base) && (edge.end == pair.quote)
     private fun isBidEdge(edge: DirectedEdge<String>, pair: BittrexCurrencyPair): Boolean  = (edge.begin == pair.quote) && (edge.end == pair.base)
-}
+}*/

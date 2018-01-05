@@ -1,6 +1,7 @@
 package com.github.trikarb
-import java.math.BigDecimal
 
+import java.math.BigDecimal
+/*
 data class DirectedEdge <T>(val begin: T, val end: T, val weight: BigDecimal){
     override fun toString(): String = "$begin-$end ($weight)"
 }
@@ -45,4 +46,11 @@ fun <T> Cycle<T>.isElementary(): Boolean {
     return true
 }
 
+fun <T> Cycle<T>.updateWeights(graph: Graph<T>): Cycle<T>{
+    return this.map{
+        edge -> graph.find {(it.begin == edge.begin) && (it.end == edge.end)} ?: edge
+    }
+}
+
 fun <T> Cycle<T>.getCrossrate() = this.fold(BigDecimal(1.0)) {rate, edge -> rate * edge.weight}
+*/

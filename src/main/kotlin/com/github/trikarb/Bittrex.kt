@@ -3,6 +3,7 @@ package com.github.trikarb
 import java.net.URL
 import java.math.BigDecimal
 import java.io.IOException
+import javax.crypto.Mac
 import com.fasterxml.jackson.module.kotlin.*
 import com.fasterxml.jackson.annotation.*
 import com.fasterxml.jackson.annotation.JsonInclude.Include
@@ -14,7 +15,7 @@ data class BittrexCurrencyPair(
     @JsonProperty("MinTradeSize") val MinTradeSize: BigDecimal  = BigDecimal(0)){
         override fun toString(): String = "${this.base}-${this.quote}"
     }
-    
+
 @JsonIgnoreProperties(ignoreUnknown=true)
 data class BittrexCurrency(
     @JsonProperty("Currency") val name: String,
@@ -65,7 +66,7 @@ private data class Response <T>(
         val message: String,
         val result: T
     )
-
+/*
 class Bittrex(version: String = "v1.1"){
     val version = version
     val mapper = jacksonObjectMapper()
@@ -78,8 +79,8 @@ class Bittrex(version: String = "v1.1"){
         //filter out bids < 0
         val edgesBids: Graph<String> = summarys.filter{it.bid > BigDecimal.ZERO}.map{
             val name = it.name.split("-")
-            val start = name[0]
-            val end = name[1]
+            val start = name[1]
+            val end = name[0]
             val weight = it.bid
             DirectedEdge<String>(start, end, weight)
         }.toSet()
@@ -88,8 +89,8 @@ class Bittrex(version: String = "v1.1"){
         //filter out asks < 0
         val edgesAsks: Graph<String> = summarys.filter{it.ask > BigDecimal.ZERO}.map{
             val name = it.name.split("-")
-            val start = name[1]
-            val end = name[0]
+            val start = name[0]
+            val end = name[1]
             val weight = BigDecimal.ONE.divide(it.ask,9,BigDecimal.ROUND_HALF_UP)
             DirectedEdge<String>(start, end, weight)
         }.toSet()
@@ -139,3 +140,4 @@ class Bittrex(version: String = "v1.1"){
         else throw IOException("$requestUrl REST Query was not successful. Got Message: ${response.message}")
     }
 }
+*/
