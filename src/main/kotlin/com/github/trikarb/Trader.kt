@@ -2,51 +2,72 @@ package com.github.trikarb
 
 import java.math.BigDecimal
 import java.math.MathContext
-import kotlin.system.measureTimeMillis
+import com.github.ccob.bittrex4j.dao.UpdateExchangeState
+import com.github.ccob.bittrex4j.dao.MarketOrdersResult
 
-sealed class Order
+class Trader(val markets: List<String>, val base: String, val maxCycleLength: Int=4){
+    
+    val orderbooks: Map<String, Orderbook> = markets.map{name ->
+        val base = name.split("-")[0]
+        val quote = name.split("-")[1]
+        name to Orderbook(base,quote)
+    }.toMap()
+    
+    val edges: List<DirectedEdge> = orderbooks.values.toList().asEdgeList()
+    val cycles: List<ArbitrageCycle> = (3..maxCycleLength).flatMap{length -> edges.getArbitrageCycles(base,length=length)}
+ 
+    public fun updateOrderbook(name: String, state: UpdateExchangeState){
+        val orderbook = orderbooks[name]
 
-data class Bid(val pair: BittrexCurrencyPair, val name: String, val amount: BigDecimal, val rate: BigDecimal): Order()
-data class Ask(val pair: BittrexCurrencyPair, val name: String, val amount: BigDecimal, val rate: BigDecimal): Order()
-/*
-class Trader(base: String, maxTradeSize: BigDecimal){
-    var trading = false
-    val baseCurrency = base
-    val maxTradeSize = maxTradeSize
-    val tradeFees = 0.25 * 0.01 //hardcoded for Bittrex
-    val bittrex = Bittrex()
-    val currencyPairs = bittrex.getMarkets()
-    val mathContext = MathContext(9)
-
-    fun triangularArbitrage() { 
-        var cycles: Set<Cycle<String>> = setOf()
-        var graph = bittrex.getMarketGraph()
-        
-        graph = bittrex.getMarketGraph()
-        cycles = graph.getCycles(baseCurrency,3)
-            .union(graph.getCycles(baseCurrency,4))
-        
-        //start trading
-        trading = true
-        while(trading){
-            var timeCycles: Long = 0
-            graph = bittrex.getMarketGraph()
-            cycles = cycles.map{it.updateWeights(graph)}.toSet()
-            val arbitrageOps = cycles.filter{
-                    it.getCrossrate() > BigDecimal(1.0 + it.size * tradeFees)
-            }
-
-            val bestOp = arbitrageOps.maxBy{it.getCrossrate()}
-            
-            if (bestOp != null){
-                val elapse = measureTimeMillis{
-                    val trades = prepareTrades(bestOp, maxTradeSize)
+        if (orderbook != null) {
+            state.buys.forEach{ bid -> 
+                when (bid.type) {
+                    0 -> orderbook.addBid(bid.rate,bid.quantity)
+                    1 -> orderbook.removeBid(bid.rate)
+                    2 -> orderbook.editBid(bid.rate,bid.quantity)
                 }
-                println("$elapse (ms) preparing trades")
             }
-        } 
+
+            state.sells.forEach{ ask ->
+                when(ask.type) {
+                    0 -> orderbook.addAsk(ask.rate,ask.quantity)
+                    1 -> orderbook.removeAsk(ask.rate)
+                    2 -> orderbook.editAsk(ask.rate,ask.quantity)
+                }
+            }
+            updateCycles(orderbook)
+        }
+
+        val op = cycles
+            //.forEach{cycle -> println(cycle.crossRate)}
+            .filter{cycle -> cycle.crossRate > BigDecimal.ONE}
+            .maxBy{it.crossRate}
+            //.maxBy{it.value()}
+
+        if (op != null){
+            println(op)
+            println("${op.crossRate} xrate. ${op.startQuantity()} $base -> ${op.startQuantity() * op.crossRate} $base ")
+            op.getOrders().forEach {order -> 
+                when (order){
+                    is Bid -> println("BUYING  ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
+                    is Ask -> println("SELLING ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
+                }
+            }
+            println("")
+        }
+        else { 
+            println("none :)")
+        }
     }
 
+    private fun updateCycles (orderbook: Orderbook){
+        for (cycle in cycles) {
+            if (orderbook in cycle.orderbooks)
+                cycle.update()
+        }
+    }
+}
+    /*
     private fun prepareTrades(cycle: Cycle<String>, amount: BigDecimal): List<Order> {
         var rate = BigDecimal.ONE
         var startingTradeAmount = amount
