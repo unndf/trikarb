@@ -5,30 +5,13 @@ import java.math.BigDecimal.ROUND_HALF_UP
 import java.util.Observable
 
 public class ArbitrageCycle(val edges: List<DirectedEdge>, val tradeFees: BigDecimal=BigDecimal(0.0025), val scale:Int=9){
-   
-    val orderbooks: HashSet<Orderbook> = edges.map { edge -> edge.orderbook }.toHashSet()
-
-    var crossRate: BigDecimal = BigDecimal.ONE
-        private set
-
-    init {
-        update()
-    }
-
-    public fun update() {
-        updateCrossRate()
-    }
-
-    private fun updateCrossRate() {
+    
+    public fun crossRate(): BigDecimal {
         val order = getOrders().last()
         
-        if (order != null){
-            val start = startQuantity()
-            val end = if (order is Bid) order.quantity else order.quantity * order.rate
-            crossRate = if (end != BigDecimal.ZERO.setScale(scale,ROUND_HALF_UP)) end / start else BigDecimal.ZERO
-        }
-        else
-            crossRate = BigDecimal.ZERO.setScale(scale,ROUND_HALF_UP)
+        val start = startQuantity()
+        val end = if (order is Bid) order.quantity else order.quantity * order.rate
+        return if (end != BigDecimal.ZERO.setScale(scale,ROUND_HALF_UP)) end / start else BigDecimal.ZERO
     }
 
     public fun getOrders(): List<Order> {
@@ -38,12 +21,12 @@ public class ArbitrageCycle(val edges: List<DirectedEdge>, val tradeFees: BigDec
             val bestBidRate = edge.orderbook.getBestBidRate() ?: BigDecimal.ONE
             val bestAskRate = edge.orderbook.getBestAskRate() ?: BigDecimal.ONE
 
-            quantity = if (edge.reverseDirection) quantity else quantity * BigDecimal.ONE / bestAskRate
+            quantity = if (edge.reverse) quantity else quantity * BigDecimal.ONE / bestAskRate
            
             quantity = quantity.setScale(scale, ROUND_HALF_UP)
-            orders.add(if (edge.reverseDirection) Ask(bestBidRate,quantity,edge.orderbook) else Bid(bestAskRate,quantity,edge.orderbook))
+            orders.add(if (edge.reverse) Ask(bestBidRate,quantity,edge.orderbook) else Bid(bestAskRate,quantity,edge.orderbook))
            
-            if (edge.reverseDirection)
+            if (edge.reverse)
                 quantity *= bestBidRate
 
             quantity *= (BigDecimal.ONE - tradeFees)
@@ -51,19 +34,18 @@ public class ArbitrageCycle(val edges: List<DirectedEdge>, val tradeFees: BigDec
         return orders.toList()
     }
 
-    public fun value(): BigDecimal = (startQuantity() * (crossRate - BigDecimal.ONE)).setScale(scale, ROUND_HALF_UP)
+    public fun value(): BigDecimal = (startQuantity() * (crossRate() - BigDecimal.ONE)).setScale(scale, ROUND_HALF_UP)
 
     public fun startQuantity(): BigDecimal {
         val start: BigDecimal? = 
             edges.mapIndexed { index, edge -> 
-                edge.quantity * edges
+                edge.quantity() * edges
                     .subList(0,index)
-                    .map { it.rate }
-                    .fold(BigDecimal.ONE) { xrate, r -> r}.setScale (scale, ROUND_HALF_UP)
+                    .map { it.rate() }
+                    .fold(BigDecimal.ONE) { xrate, r -> r }.setScale (scale, ROUND_HALF_UP)
             }
             .min()
-        return BigDecimal.ONE.setScale(scale,ROUND_HALF_UP)
-        //return if (start != null) start.setScale(scale,ROUND_HALF_UP) else BigDecimal.ZERO
+        return if (start != null) start.setScale(scale,ROUND_HALF_UP) else BigDecimal.ZERO
     }
 
     public override fun toString(): String{

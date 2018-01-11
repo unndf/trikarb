@@ -35,18 +35,17 @@ class Trader(val markets: List<String>, val base: String, val maxCycleLength: In
                     2 -> orderbook.editAsk(ask.rate,ask.quantity)
                 }
             }
-            updateCycles(orderbook)
         }
 
         val op = cycles
             //.forEach{cycle -> println(cycle.crossRate)}
-            .filter{cycle -> cycle.crossRate > BigDecimal.ONE}
-            .maxBy{it.crossRate}
+            .filter{cycle -> cycle.crossRate() > BigDecimal.ONE}
+            .maxBy{it.crossRate()}
             //.maxBy{it.value()}
 
         if (op != null){
             println(op)
-            println("${op.crossRate} xrate. ${op.startQuantity()} $base -> ${op.startQuantity() * op.crossRate} $base ")
+            println("${op.crossRate()} xrate. ${op.startQuantity()} $base -> ${op.startQuantity() * op.crossRate()} $base ")
             op.getOrders().forEach {order -> 
                 when (order){
                     is Bid -> println("BUYING  ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
@@ -57,13 +56,6 @@ class Trader(val markets: List<String>, val base: String, val maxCycleLength: In
         }
         else { 
             println("none :)")
-        }
-    }
-
-    private fun updateCycles (orderbook: Orderbook){
-        for (cycle in cycles) {
-            if (orderbook in cycle.orderbooks)
-                cycle.update()
         }
     }
 }
