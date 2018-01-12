@@ -5,25 +5,22 @@ import java.math.BigDecimal.ROUND_HALF_UP
 import java.util.SortedMap
 import java.util.TreeMap
 
-class Orderbook (val baseSymbol: String, val quoteSymbol: String, val scale: Int=9){
+class Orderbook (
+    val baseSymbol: String,
+    val quoteSymbol: String,
+    val tradeFee: BigDecimal=BigDecimal("0.00025"),
+    val scale: Int=9) {
+
     val bid: SortedMap<BigDecimal, BigDecimal> = TreeMap()
     val ask: SortedMap<BigDecimal, BigDecimal> = TreeMap()
 
-    public fun getBestBidRate(): BigDecimal? {
-        return if (bid.size > 0) bid.lastKey() else null
-    }
+    public fun getBestBidRate(): BigDecimal? = if (bid.size > 0) bid.lastKey() else null
 
-    public fun getBestBidQuantity(): BigDecimal?{
-        return if (bid.size > 0) bid[bid.lastKey()] else null
-    }
+    public fun getBestBidQuantity(): BigDecimal? = if (bid.size > 0) bid[bid.lastKey()] else null
 
-    public fun getBestAskRate(): BigDecimal? {
-        return if (ask.size > 0) ask.firstKey() else null
-    }
+    public fun getBestAskRate(): BigDecimal? = if (ask.size > 0) ask.firstKey() else null
 
-    public fun getBestAskQuantity(): BigDecimal? {
-        return if (ask.size > 0) ask[ask.firstKey()] else null
-    }
+    public fun getBestAskQuantity(): BigDecimal? = if (ask.size > 0) ask[ask.firstKey()] else null
     
     public fun editBid(rate: BigDecimal, quantity: BigDecimal) {
         bid[rate] = quantity.setScale(scale,ROUND_HALF_UP)
@@ -81,5 +78,5 @@ class Orderbook (val baseSymbol: String, val quoteSymbol: String, val scale: Int
 }
 
 public fun List<Orderbook>.asEdgeList(): List<DirectedEdge> {
-    return this.flatMap{book -> listOf(DirectedEdge(book),DirectedEdge(book, reverseDirection=true))}
+    return this.flatMap{book -> listOf(DirectedEdge(book),DirectedEdge(book, reverse=true))}
 }

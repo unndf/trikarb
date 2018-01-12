@@ -1,71 +1,60 @@
 package com.github.trikarb
 
+import com.github.trikarb.util.inverse
 import java.math.BigDecimal
 import java.math.BigDecimal.ROUND_HALF_UP
 
-public class DirectedEdge(val orderbook: Orderbook, val reverseDirection: Boolean=false, val scale:Int=9) {
-    //getters and setters for rate and quantity are explicity defined
-    //gets need to return a copy to reduce side-effects after calling get
-    //forces the use of update* methods to change rate and quantity
+/**
+An Edge on a Directed Graph
 
-    var rate: BigDecimal = BigDecimal.ZERO
-        private set
-    
-    var quantity: BigDecimal =  BigDecimal.ZERO
-        private set
-    
-    val begin: String = if (!reverseDirection) orderbook.baseSymbol else orderbook.quoteSymbol
-    val end: String = if (!reverseDirection) orderbook.quoteSymbol else orderbook.baseSymbol
+This edge is backed by an Order book which provides the values for the weight of the edge (rate of the best bid/ask in the book)
 
-    init{
-        updateRate()
-        updateQuantity()
-    }
-
-    public fun getBaseSymbol(): String = orderbook.baseSymbol
+@param orderbook the backing Order Book
+@param reverse boolean flag indicating whether this edge is a backedge or not
+*/
+public class DirectedEdge(val orderbook: Orderbook, val reverse: Boolean=false) {
+   
+    //Symbols for the start/end of an edge eg. BTC->ETH. BTC = start and ETH = end
+    val begin: String = if (!reverse) orderbook.baseSymbol else orderbook.quoteSymbol
+    val end: String = if (!reverse) orderbook.quoteSymbol else orderbook.baseSymbol
     
-    public fun getQuoteSymbol(): String = orderbook.quoteSymbol
+    val scale = orderbook.scale
     
-    public fun update() {
-        updateRate()
-        updateQuantity()
-    }
-
-    private fun updateRate(){
-        if(!reverseDirection){
-            val bestBidRate = orderbook.getBestBidRate()
-            rate = if(bestBidRate != null) 
-                    (BigDecimal.ONE.setScale(scale,ROUND_HALF_UP) / bestBidRate).setScale(scale,ROUND_HALF_UP) 
-                else
-                    BigDecimal.ZERO
-        }
-        else {
+    public fun weight(): BigDecimal {
+        if(!reverse) {
             val bestAskRate = orderbook.getBestAskRate()
-            rate = if(bestAskRate != null) 
-                    bestAskRate.setScale(scale, ROUND_HALF_UP)
+            return if (bestAskRate != null) 
+                    bestAskRate.inverse()
+                else
+                    BigDecimal.ZERO
+        } 
+        else {
+            val bestBidRate = orderbook.getBestBidRate()
+            return if (bestBidRate != null) 
+                    bestBidRate.setScale(scale, ROUND_HALF_UP)
                 else
                     BigDecimal.ZERO
         }
     }
 
-    private fun updateQuantity(){
-        if(!reverseDirection){
+    public fun quantity(): BigDecimal {
+        if(!reverse) {
             val bestBidQuantity = orderbook.getBestBidQuantity()
-            quantity = if(bestBidQuantity != null) 
-                    (bestBidQuantity).setScale(scale,ROUND_HALF_UP) 
+            return if (bestBidQuantity != null) 
+                    bestBidQuantity
                 else 
                     BigDecimal.ZERO
         }
         else {
             val bestAskQuantity = orderbook.getBestAskQuantity()
-            quantity = if(bestAskQuantity != null) 
-                    (bestAskQuantity).setScale(scale, ROUND_HALF_UP)
+            return if(bestAskQuantity != null) 
+                    bestAskQuantity
                 else 
                     BigDecimal.ZERO
         }
     }
 
     public override fun toString(): String {
-        return "$begin -> $end @ $rate"
+        return "$begin -> $end @ ${weight()}"
     }
 }

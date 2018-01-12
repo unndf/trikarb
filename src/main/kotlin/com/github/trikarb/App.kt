@@ -17,8 +17,6 @@ fun main(args: Array<String>){
     })
     
     bittrexExchange.connectToWebSocket({
-        val bittrexTemp = BittrexExchange()
-        var count = 0
         trader.markets.forEach {name ->
             bittrexExchange.queryExchangeState(name, {updateExchangeState ->
                 trader.updateOrderbook(name, updateExchangeState)
