@@ -4,6 +4,14 @@ import com.github.trikarb.util.inverse
 import java.math.BigDecimal
 import java.math.BigDecimal.ROUND_HALF_UP
 
+/**
+An Edge on a Directed Graph
+
+This edge is backed by an Order book which provides the values for the weight of the edge (rate of the best bid/ask in the book)
+
+@param orderbook the backing Order Book
+@param reverse boolean flag indicating whether this edge is a backedge or not
+*/
 public class DirectedEdge(val orderbook: Orderbook, val reverse: Boolean=false) {
    
     //Symbols for the start/end of an edge eg. BTC->ETH. BTC = start and ETH = end
@@ -12,7 +20,7 @@ public class DirectedEdge(val orderbook: Orderbook, val reverse: Boolean=false) 
     
     val scale = orderbook.scale
     
-    public fun rate(): BigDecimal {
+    public fun weight(): BigDecimal {
         if(!reverse) {
             val bestAskRate = orderbook.getBestAskRate()
             return if (bestAskRate != null) 
@@ -47,6 +55,6 @@ public class DirectedEdge(val orderbook: Orderbook, val reverse: Boolean=false) 
     }
 
     public override fun toString(): String {
-        return "$begin -> $end @ ${rate()}"
+        return "$begin -> $end @ ${weight()}"
     }
 }

@@ -1,27 +1,35 @@
 package com.github.trikarb
 
+import com.github.trikarb.util.inverse
 import java.math.BigDecimal
 import java.math.BigDecimal.ROUND_HALF_UP
 import java.util.Observable
 
-public class ArbitrageCycle(val edges: List<DirectedEdge>, val tradeFees: BigDecimal=BigDecimal(0.0025), val scale:Int=9){
+public class ArbitrageCycle(
+    val edges: List<DirectedEdge>, 
+    val balance: BigDecimal = BigDecimal.ONE,
+    val tradeFees: BigDecimal = BigDecimal("0.0025"),
+    val scale: Int=9) {
     
     public fun crossRate(): BigDecimal {
         val order = getOrders().last()
         
         val start = startQuantity()
         val end = if (order is Bid) order.quantity else order.quantity * order.rate
-        return if (end != BigDecimal.ZERO.setScale(scale,ROUND_HALF_UP)) end / start else BigDecimal.ZERO
+        return if (end != BigDecimal.ZERO.setScale(scale,ROUND_HALF_UP))
+                (end / start).setScale(scale,ROUND_HALF_UP) 
+            else 
+                BigDecimal.ZERO
     }
 
     public fun getOrders(): List<Order> {
         val orders: MutableList<Order> = mutableListOf()
         var quantity = startQuantity() 
         for (edge in edges){
-            val bestBidRate = edge.orderbook.getBestBidRate() ?: BigDecimal.ONE
-            val bestAskRate = edge.orderbook.getBestAskRate() ?: BigDecimal.ONE
+            val bestBidRate = edge.orderbook.getBestBidRate() ?: BigDecimal.ONE.setScale(scale, ROUND_HALF_UP)
+            val bestAskRate = edge.orderbook.getBestAskRate() ?: BigDecimal.ONE.setScale(scale, ROUND_HALF_UP)
 
-            quantity = if (edge.reverse) quantity else quantity * BigDecimal.ONE / bestAskRate
+            quantity = if (edge.reverse) quantity else quantity * bestAskRate.inverse()
            
             quantity = quantity.setScale(scale, ROUND_HALF_UP)
             orders.add(if (edge.reverse) Ask(bestBidRate,quantity,edge.orderbook) else Bid(bestAskRate,quantity,edge.orderbook))
@@ -41,11 +49,14 @@ public class ArbitrageCycle(val edges: List<DirectedEdge>, val tradeFees: BigDec
             edges.mapIndexed { index, edge -> 
                 edge.quantity() * edges
                     .subList(0,index)
-                    .map { it.rate() }
+                    .map { it.weight() }
                     .fold(BigDecimal.ONE) { xrate, r -> r }.setScale (scale, ROUND_HALF_UP)
             }
             .min()
-        return if (start != null) start.setScale(scale,ROUND_HALF_UP) else BigDecimal.ZERO
+        return if (start != null) 
+                balance.setScale(scale,ROUND_HALF_UP).min(start.setScale(scale,ROUND_HALF_UP))
+            else 
+                BigDecimal.ZERO
     }
 
     public override fun toString(): String{
@@ -75,9 +86,9 @@ public fun List<DirectedEdge>.getArbitrageCycles(begin: String, length: Int=3): 
         .map{ArbitrageCycle(it)}
 }
 
-public fun List<DirectedEdge>.outEdges(vertex: String): List<DirectedEdge> = this.filter{edge -> edge.begin == vertex}
+private fun List<DirectedEdge>.outEdges(vertex: String): List<DirectedEdge> = this.filter{edge -> edge.begin == vertex}
 
-public fun List<DirectedEdge>.isElementary(): Boolean {
+private fun List<DirectedEdge>.isElementary(): Boolean {
     val source = this.first().begin
     val seenVertices: MutableSet<String> = hashSetOf()
     for (edge in this){

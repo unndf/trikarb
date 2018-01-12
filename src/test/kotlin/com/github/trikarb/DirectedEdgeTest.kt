@@ -24,9 +24,9 @@ class DirectedEdgeTest {
     val ABEdge = DirectedEdge(AB)
     val BAEdge = DirectedEdge(AB,reverse=true)
 
-    @Test fun `rate test`(){
-        assertEquals (bestAsk.inverse(), ABEdge.rate())
-        assertEquals (bestBid, BAEdge.rate())
-        assertEquals (BigDecimal.ONE.setScale(scale,ROUND_HALF_UP), (ABEdge.rate() * BAEdge.rate()).setScale(scale,ROUND_HALF_UP))
+    @Test fun `weight test`(){
+        assertEquals (bestAsk.inverse(), ABEdge.weight())
+        assertEquals (bestBid, BAEdge.weight())
+        assertEquals (BigDecimal.ONE.setScale(scale,ROUND_HALF_UP), (ABEdge.weight() * BAEdge.weight()).setScale(scale,ROUND_HALF_UP))
     }
 }
