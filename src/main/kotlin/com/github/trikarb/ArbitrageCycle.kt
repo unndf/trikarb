@@ -22,6 +22,7 @@ public class ArbitrageCycle(
                 BigDecimal.ZERO
     }
 
+    //TODO: Refactor. This method has too much funtionality that should be handled by the orderbook
     public fun getOrders(): List<Order> {
         val orders: MutableList<Order> = mutableListOf()
         var quantity = startQuantity() 
@@ -37,7 +38,7 @@ public class ArbitrageCycle(
             if (edge.reverse)
                 quantity *= bestBidRate
 
-            quantity *= (BigDecimal.ONE - tradeFees)
+            quantity *= (BigDecimal.ONE - edge.orderbook.tradeFee)
         }
         return orders.toList()
     }

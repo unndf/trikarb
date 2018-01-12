@@ -5,7 +5,12 @@ import java.math.BigDecimal.ROUND_HALF_UP
 import java.util.SortedMap
 import java.util.TreeMap
 
-class Orderbook (val baseSymbol: String, val quoteSymbol: String, val scale: Int=9){
+class Orderbook (
+    val baseSymbol: String,
+    val quoteSymbol: String,
+    val tradeFee: BigDecimal=BigDecimal("0.00025"),
+    val scale: Int=9) {
+
     val bid: SortedMap<BigDecimal, BigDecimal> = TreeMap()
     val ask: SortedMap<BigDecimal, BigDecimal> = TreeMap()
 
