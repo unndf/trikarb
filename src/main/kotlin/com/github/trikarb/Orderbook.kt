@@ -31,7 +31,7 @@ class Orderbook (
     }
 
     public fun editAsk(rate: BigDecimal, quantity: BigDecimal) {
-        ask[rate] = quantity.setScale(scale,ROUND_HALF_UP)
+        ask[rate.setScale(scale,ROUND_HALF_UP)] = quantity.setScale(scale,ROUND_HALF_UP)
     }
 
     public fun editAsk(rate: Double, quantity: Double) {
