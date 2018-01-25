@@ -3,3 +3,5 @@ target
 *.jar
 *.swp
 *.tags
+*keys
+build

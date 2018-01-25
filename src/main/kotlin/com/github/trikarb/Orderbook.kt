@@ -8,9 +8,10 @@ import java.util.TreeMap
 class Orderbook (
     val baseSymbol: String,
     val quoteSymbol: String,
-    val tradeFee: BigDecimal=BigDecimal("0.00025"),
-    val scale: Int=9) {
-
+    val tradeFee: BigDecimal=BigDecimal("0.0025"),
+    val scale: Int=8) {
+    
+    val market = "$baseSymbol-$quoteSymbol"
     val bid: SortedMap<BigDecimal, BigDecimal> = TreeMap()
     val ask: SortedMap<BigDecimal, BigDecimal> = TreeMap()
 
