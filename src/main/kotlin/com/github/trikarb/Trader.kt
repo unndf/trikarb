@@ -2,23 +2,52 @@ package com.github.trikarb
 
 import java.math.BigDecimal
 import java.math.MathContext
+import kotlin.system.measureTimeMillis
+import com.github.ccob.bittrex4j.BittrexExchange
 import com.github.ccob.bittrex4j.dao.UpdateExchangeState
 import com.github.ccob.bittrex4j.dao.MarketOrdersResult
 
-class Trader(val markets: List<String>, val base: String, val maxCycleLength: Int=4){
+class Trader(val base: String, val privateKey: String, val secret: String, maxCycleLength: Int=4){
+    val bittrexExchange = BittrexExchange(privateKey, secret)
     
-    val orderbooks: Map<String, Orderbook> = markets.map{name ->
-        val base = name.split("-")[0]
-        val quote = name.split("-")[1]
-        name to Orderbook(base,quote)
+    //create a list of all markets
+    val markets = bittrexExchange.marketSummaries.result.map{marketSummary -> marketSummary.market}
+    val balance: BigDecimal = BigDecimal(bittrexExchange.getBalance(base).result.available)
+    var executingTrades = false
+
+
+    val orderbooks: Map<String, Orderbook> = markets.map{market ->
+        val base = market.marketName.split("-")[0]
+        val quote = market.marketName.split("-")[1]
+        market.marketName to Orderbook(base,quote)
     }.toMap()
     
     val edges: List<DirectedEdge> = orderbooks.values.toList().asEdgeList()
-    val cycles: List<ArbitrageCycle> = (3..maxCycleLength).flatMap{length -> edges.getArbitrageCycles(base,length=length)}
- 
-    public fun updateOrderbook(name: String, state: UpdateExchangeState){
-        val orderbook = orderbooks[name]
+    val cycles: List<ArbitrageCycle> = (3..maxCycleLength).flatMap{length -> edges.getArbitrageCycles(base,length=length,balance=balance)}
 
+    init {
+        println("BALANCE $balance")
+
+        //create listeners
+        bittrexExchange.onUpdateExchangeState({updateExchangeState -> 
+            updateOrderbook(updateExchangeState.marketName, updateExchangeState)
+        })
+        
+        bittrexExchange.connectToWebSocket({
+            markets.forEach {market ->
+                bittrexExchange.queryExchangeState(market.marketName, {updateExchangeState ->
+                    updateOrderbook(market.marketName, updateExchangeState)
+                })
+                bittrexExchange.subscribeToExchangeDeltas(market.marketName,null)
+            }
+        })
+
+    }    
+    
+    //TODO: refactor into orderbook
+    public fun updateOrderbook(name: String, state: UpdateExchangeState) {
+        val orderbook = orderbooks[name]
+        val timeUpdating = measureTimeMillis{
         if (orderbook != null) {
             state.buys.forEach{ bid -> 
                 when (bid.type) {
@@ -36,81 +65,81 @@ class Trader(val markets: List<String>, val base: String, val maxCycleLength: In
                 }
             }
         }
-
-        val op = cycles
-            //.forEach{cycle -> println(cycle.crossRate)}
-            .filter{cycle -> cycle.crossRate() > BigDecimal.ONE}
-            .maxBy{it.crossRate()}
-            //.maxBy{it.value()}
-
-        if (op != null){
-            println(op)
-            println("${op.crossRate()} xrate. ${op.startQuantity()} $base -> ${op.startQuantity() * op.crossRate()} $base ")
-            op.getOrders().forEach {order -> 
-                when (order){
-                    is Bid -> println("BUYING  ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
-                    is Ask -> println("SELLING ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
-                }
-            }
-            println("")
         }
-        else { 
-            println("none :)")
+        val timeCalcCycles = measureTimeMillis {
+            recalculateCycles()
+        }
+        println("time spent updating books: $timeUpdating, ${state.buys.size + state.sells.size} entries.")
+        println("time spent clac cycles $timeCalcCycles")
+    }
+
+    private fun recalculateCycles() {
+        val op = cycles
+            .filter { cycle -> cycle.crossRate() > BigDecimal.ONE }
+            .filter { 
+                it.getOrders().all {
+                    order -> 
+                        val market = markets.find { market -> market.marketName == order.market}
+                        if (market != null)
+                            order.quantity.toDouble() > market.minTradeSize
+                        else 
+                            false
+                } 
+            }
+            .maxBy { it.value() }
+        
+        if (op != null){
+            if (!executingTrades) {
+                println(op)
+                println("${op.crossRate()} xrate. ${op.startQuantity()} $base -> ${(op.startQuantity() * op.crossRate())} $base ")
+                executingTrades = true
+                op.getOrders().forEach {order -> 
+                    when (order){
+                        is Bid -> {
+                            println("BUYING  ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
+                        /*
+                            val resp = bittrexExchange.buyLimit(order.market, order.quantity.toDouble(), order.rate.toDouble())
+                            if (resp.isSuccess()){
+                                println("AYE!!!!")
+                                val uuid = resp.result.uuid
+                                var executed = false
+                                while (!executed){
+                                    val resp = bittrexExchange.getOrder(uuid)
+                                    if (resp.isSuccess()){
+                                        executed = !resp.result.isOpen()
+                                        println("LIMIT EXECUTED is $executed")
+                                    }
+                                }
+                            }
+                            else{
+                                println(resp.message)
+                            }*/
+                        }
+                        is Ask -> {
+                            println("SELLING ${order.quantity} ${order.orderbook.quoteSymbol} @ ${order.rate} ON ${order.orderbook.quoteSymbol}/${order.orderbook.baseSymbol}")
+                            /*
+                            val resp = bittrexExchange.sellLimit(order.market, order.quantity.toDouble(), order.rate.toDouble())
+                            if (resp.isSuccess()){
+                                println("AYE!!!!")
+                                val uuid = resp.result.uuid
+                                var executed = false
+                                while (!executed){
+                                    val resp = bittrexExchange.getOrder(uuid)
+                                    if (resp.isSuccess()){
+                                        executed = !resp.result.isOpen()
+                                        println("LIMIT EXECUTED is $executed")
+                                    }
+                                }
+                            }
+                            else{
+                                println(resp.message)
+                            }*/
+                        }
+                    }
+                    println("")
+                }
+                executingTrades = false
+            }
         }
     }
 }
-    /*
-    private fun prepareTrades(cycle: Cycle<String>, amount: BigDecimal): List<Order> {
-        var rate = BigDecimal.ONE
-        var startingTradeAmount = amount
-        val orders: MutableList<Order> = mutableListOf()
-        for (edge in cycle){
-            for (pair in currencyPairs){
-                if (isAskEdge(edge, pair)){
-                    val book = bittrex.getOrderbook(pair)
-                    val bestAsk = book.getBestAsk()
-    
-                    if(bestAsk != null){
-                        rate = rate.multiply(bestAsk.rate,mathContext)
-                        orders.add(Bid(pair,edge.end,BigDecimal.ZERO,bestAsk.rate))
-                        if (startingTradeAmount * rate > bestAsk.quantity) 
-                            startingTradeAmount = BigDecimal.ONE.divide(rate,9,BigDecimal.ROUND_HALF_UP).multiply(bestAsk.quantity, mathContext)
-                    }
-                    break
-                }
-                else if (isBidEdge(edge, pair)){
-                    val book = bittrex.getOrderbook(pair)
-                    val bestBid = book.getBestBid()
-
-                    //sell x quote @ bid
-                    if(bestBid != null){
-                        rate = rate.multiply(BigDecimal.ONE.divide(bestBid.rate,9,BigDecimal.ROUND_HALF_UP), mathContext)
-                        orders.add(Ask(pair,edge.begin,BigDecimal.ZERO,bestBid.rate))
-                        if (startingTradeAmount * rate > bestBid.quantity)
-                            startingTradeAmount = BigDecimal.ONE.divide(rate,9,BigDecimal.ROUND_HALF_UP).multiply(bestBid.quantity, mathContext)
-                    }
-                    break
-                }
-            }
-        }
-        var x = startingTradeAmount
-        
-        return orders.map{
-            when(it){
-                is Bid -> {
-                    val bid = Bid(it.pair,it.name,x.multiply(BigDecimal.ONE.divide(it.rate,9,BigDecimal.ROUND_HALF_UP),mathContext), it.rate)
-                    x = x.multiply(BigDecimal.ONE.divide(it.rate,9,BigDecimal.ROUND_HALF_UP) * BigDecimal(1.0 - tradeFees), mathContext)
-                    bid
-                }
-                is Ask -> {
-                    val ask = Ask(it.pair,it.name,x,it.rate)
-                    x = x.multiply(it.rate * BigDecimal(1.0 - tradeFees), mathContext)
-                    ask
-                }
-            }
-        }
-    }
-
-    private fun isAskEdge(edge: DirectedEdge<String>, pair: BittrexCurrencyPair): Boolean  = (edge.begin == pair.base) && (edge.end == pair.quote)
-    private fun isBidEdge(edge: DirectedEdge<String>, pair: BittrexCurrencyPair): Boolean  = (edge.begin == pair.quote) && (edge.end == pair.base)
-}*/
