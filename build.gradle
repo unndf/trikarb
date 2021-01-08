@@ -30,33 +30,34 @@ dependencies {
     testCompile 'junit:junit:3.8.2'
 }
 */
-buildscript {
-    ext.kotlin_version = '1.2.20'
-
-    repositories {
-        mavenCentral()
-    }
-
-    dependencies {
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-    }
+plugins {
+    id "org.jetbrains.kotlin.jvm" version "1.4.21"
+    id 'org.jetbrains.kotlin.plugin.serialization' version '1.4.10'
 }
 
-apply plugin: "kotlin"
+repositories {
+    mavenCentral()
+}
 
 repositories {
     mavenCentral()    
 }
 
-task copyToLib(type: Copy) {
-    into "$buildDir/libs"
-    from configurations.runtime
+kotlin {
+    sourceSets {
+        commonMain {
+            dependencies {
+                //implementation "com.github.ccob:bittrex4j:1.0.4"
+                //implementation  "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+                //testCompile "org.jetbrains.kotlin:kotlin-test"
+                //testCompile "org.jetbrains.kotlin:kotlin-test-junit"
+            }
+        }
+    }
 }
-build.dependsOn(copyToLib)
-
 dependencies {
-    compile "com.github.ccob:bittrex4j:1.0.4"
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation "com.github.ccob:bittrex4j:1.0.4"
+    implementation  "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     testCompile "org.jetbrains.kotlin:kotlin-test"
     testCompile "org.jetbrains.kotlin:kotlin-test-junit"
 }
